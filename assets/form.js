@@ -225,13 +225,31 @@ var suggestedLayers = {
   "Giygas (265 / 0)": [265, 0],
 };
 
-let content,
-  endlessIntervalID,
-  layer1,
-  layer2,
-  suggested,
-  aspectRatio,
-  frameskip;
+var whiteKeys = [
+  36, 36, 38, 38, 40, 40, 41, 41, 43, 43, 45, 45, 47, 47, 48, 48, 50, 50, 52,
+  52, 53, 53, 55, 55, 57, 57, 59, 59, 60, 60, 62, 62, 64, 64, 65, 65, 67, 67,
+  69, 69, 71, 71, 72, 72, 74, 74, 76, 76, 77, 77, 79, 79, 81, 81, 83, 83, 84,
+  84,
+];
+
+var blackKeys = [
+  37, 37, 39, 39, 42, 42, 44, 44, 46, 46, 49, 49, 51, 51, 54, 54, 56, 56, 58,
+  58, 61, 61, 63, 63, 66, 66, 68, 68, 70, 70, 73, 73, 75, 75, 78, 78, 80, 80,
+  82, 82,
+];
+
+var text = "";
+var layer1 = 0;
+var layer2 = 0;
+
+// var domain = window.location.host;
+var domain = "http://localhost:8888/";
+
+document.addEventListener("DOMContentLoaded", function () {
+  window.History.Adapter.bind(window, "statechange", function () {
+    setupEngine();
+  });
+});
 
 if (navigator.requestMIDIAccess) {
   console.log("This browser supports WebMIDI!");
@@ -252,28 +270,11 @@ function onMIDIFailure() {
   );
 }
 
-const whiteKeys = [
-  36, 36, 38, 38, 40, 40, 41, 41, 43, 43, 45, 45, 47, 47, 48, 48, 50, 50, 52,
-  52, 53, 53, 55, 55, 57, 57, 59, 59, 60, 60, 62, 62, 64, 64, 65, 65, 67, 67,
-  69, 69, 71, 71, 72, 72, 74, 74, 76, 76, 77, 77, 79, 79, 81, 81, 83, 83, 84,
-  84,
-];
-
-const blackKeys = [
-  37, 37, 39, 39, 42, 42, 44, 44, 46, 46, 49, 49, 51, 51, 54, 54, 56, 56, 58,
-  58, 61, 61, 63, 63, 66, 66, 68, 68, 70, 70, 73, 73, 75, 75, 78, 78, 80, 80,
-  82, 82,
-];
-
 function getMIDIMessage(message) {
   var command = message.data[0];
   var note = message.data[1];
-  var mod = message.data[2];
+  var mod = message.data.length > 2 ? message.data[2] : 0;
   var velocity = message.data.length > 2 ? message.data[2] / 100 : 0; // a velocity value might not be included with a noteOff command
-  // console.log(mod);
-  // console.log(velocity);
-
-  // console.log(command);
 
   switch (command) {
     case 144: // noteOn
@@ -282,232 +283,37 @@ function getMIDIMessage(message) {
         var number = Math.round(((wIndex + velocity) * 100) / whiteKeys.length);
 
         document.engine.layers[0] = new document.BackgroundLayer(number, ROM);
-        // History.pushState(
-        //   { layer1: number },
-        //   document.title,
-        //   setUrlFromString("layer1=" + number)
-        // );
+        layer1 = number;
       }
 
       if (blackKeys.includes(note)) {
         var keys = Object.keys(suggestedLayers);
-        // var bIndex = blackKeys.findIndex((n) => n === note);
         var random = suggestedLayers[keys[(keys.length * Math.random()) << 0]];
         var number1 = random[0];
         var number2 = random[1];
-        console.log(number1, number2);
 
         document.engine.layers[0] = new document.BackgroundLayer(number1, ROM);
-        // History.pushState(
-        //   { layer1: number1 },
-        //   document.title,
-        //   setUrlFromString("layer1=" + number1)
-        // );
-
         document.engine.layers[1] = new document.BackgroundLayer(number2, ROM);
-        History.pushState(
-          { layer2: number2 },
-          document.title,
-          setUrlFromString("layer2=" + number2)
-        );
+        layer1 = number1;
+        layer2 = number2;
       }
       break;
-    // case 128: // noteOff
-    //   console.log("note OFF: ", note);
-    //   break;
-    // we could easily expand this switch statement to cover other types of commands such as controllers or sysex
     case 176: // mod
-      console.log("mod:  ", mod * 2);
-      var modifier = mod * 2;
+      var modifier = mod ?? mod * 2;
       document.engine.layers[1] = new document.BackgroundLayer(modifier, ROM);
-      // History.pushState(
-      //   { layer2: modifier },
-      //   document.title,
-      //   setUrlFromString("layer2=" + modifier)
-      // );
+      layer2 = modifier;
       break;
   }
-}
 
-document.addEventListener("DOMContentLoaded", function () {
-  content = document.querySelector("section#everything");
-  layer1 = document.getElementById("layer1");
-  layer2 = document.getElementById("layer2");
-  suggested = document.getElementById("suggested");
-  aspectRatio = document.getElementById("aspectRatio");
-  frameskip = document.getElementById("frameskip");
-  let randomLayer = document.getElementById("randomLayer");
-  let endlessRandom = document.getElementById("endlessRandom");
-  let fullscreen = document.getElementById("fullscreen");
-
-  // okay, we haven't gone fullscreen
-  if (content) {
-    endlessIntervalID = null;
-    randomLayer.onclick = setRandomLayer;
-    endlessRandom.onclick = setEndlessRandom;
-    fullscreen.onclick = setupFullscreen;
-
-    createLayerDropdown();
-    createSuggestedLayersDropdown();
-    setupDropdownPushStates();
-    setupSelectedValues();
-  }
-
-  window.History.Adapter.bind(window, "statechange", function () {
-    setupEngine();
-  });
-});
-
-function createLayerDropdown() {
-  var optionHtml = "";
-  for (var i = 0; i < 327; i++) {
-    optionHtml += "<option value='" + i + "'>" + i + "</option>";
-  }
-
-  layer1.innerHTML = optionHtml;
-  layer2.innerHTML = optionHtml;
-}
-
-function createSuggestedLayersDropdown() {
-  let optionHtml = "<option value='-1'></option>";
-
-  for (var key in suggestedLayers) {
-    if (suggestedLayers.hasOwnProperty(key)) {
-      optionHtml += '<option value="' + key + '">' + key + "</option>";
-    }
-  }
-  suggested.innerHTML = optionHtml;
-}
-
-function setupDropdownPushStates() {
-  layer1.onchange = function (e) {
-    var value = this.value;
-    if (value < 0) {
-      value = 0;
-    }
-    document.engine.layers[0] = new document.BackgroundLayer(value, ROM);
-    History.pushState(
-      { layer1: value },
-      document.title,
-      setUrlFromString("layer1=" + value)
-    );
-  };
-
-  layer2.onchange = function (e) {
-    var value = this.value;
-    if (value < 0) {
-      value = 0;
-    }
-    document.engine.layers[1] = new document.BackgroundLayer(value, ROM);
-    History.pushState(
-      { layer2: value },
-      document.title,
-      setUrlFromString("layer2=" + value)
-    );
-  };
-
-  suggested.onchange = function (e) {
-    var value = this.value;
-    try {
-      layer1.selectedIndex = suggestedLayers[value][0];
-      layer1.onchange();
-      layer2.selectedIndex = suggestedLayers[value][1];
-      layer2.onchange();
-    } catch (e) {}
-  };
-
-  aspectRatio.onchange = function (e) {
-    var value = this.value;
-    History.pushState(
-      { aspectRatio: value },
-      document.title,
-      setUrlFromString("aspectRatio=" + value)
-    );
-  };
-
-  frameskip.onchange = function (e) {
-    var value = this.value;
-    History.pushState(
-      { frameskip: value },
-      document.title,
-      setUrlFromString("frameskip=" + value)
-    );
-  };
-}
-
-function setRandomLayer() {
-  layer1.selectedIndex = String(Math.floor(Math.random() * 327));
-  layer2.selectedIndex = String(Math.floor(Math.random() * 327));
-  // Fake an onchange to set URL and redraw scene
-  layer1.onchange();
-  layer2.onchange();
-}
-
-function setEndlessRandom() {
-  if (endlessIntervalID == null) {
-    endlessRandom.textContent = "Endless Random (on)";
-    setRandomLayer();
-    endlessIntervalID = setInterval(function () {
-      setRandomLayer();
-    }, 7500);
-  } else {
-    clearInterval(endlessIntervalID);
-    endlessRandom.textContent = "Endless Random (off)";
-    endlessIntervalID = null;
-  }
-}
-
-function setupSelectedValues() {
-  var canvas = document.querySelector("canvas");
-
-  var layerOneReplace = 'value="' + canvas.dataset.layerOne + '"';
-  var layerTwoReplace = 'value="' + canvas.dataset.layerTwo + '"';
-  layer1.innerHTML = layer1.innerHTML.replace(
-    new RegExp(layerOneReplace),
-    "selected " + layerOneReplace
-  );
-  layer2.innerHTML = layer2.innerHTML.replace(
-    new RegExp(layerTwoReplace),
-    "selected " + layerTwoReplace
-  );
-
-  var aspectRatioReplace = 'value="' + canvas.dataset.aspectRatio + '"';
-  aspectRatio.innerHTML = aspectRatio.innerHTML.replace(
-    new RegExp(aspectRatioReplace),
-    "selected " + aspectRatioReplace
-  );
-
-  var frameskipReplace = 'value="' + canvas.dataset.frameskip + '"';
-  frameskip.innerHTML = frameskip.innerHTML.replace(
-    new RegExp(frameskipReplace),
-    "selected " + frameskipReplace
-  );
-}
-
-function setupFullscreen() {
-  var canvas = document.querySelector("canvas");
-  var content = document.querySelector("section#everything");
-  if (canvas.getAttribute("id") != "full") {
-    canvas.setAttribute("id", "full");
-    content.classList.add("hidden");
-    History.pushState(
-      { fullscreen: true },
-      document.title,
-      setUrlFromString("fullscreen=" + true)
-    );
-  }
+  text = window.location.host + "?layer1=" + layer1 + "&layer2=" + layer2;
 }
 
 document.addEventListener("keyup", function (event) {
   if (event.code == "Escape") {
-    var canvas = document.querySelector("canvas");
-    var content = document.querySelector("section#everything");
-    canvas.setAttribute("id", "");
-    content.classList.remove("hidden");
-    History.pushState(
-      { fullscreen: null },
-      document.title,
-      setUrlFromString("fullscreen=false")
-    );
+    console.log("esc");
+  }
+
+  if (event.key == "c") {
+    navigator.clipboard.writeText(text);
   }
 });
