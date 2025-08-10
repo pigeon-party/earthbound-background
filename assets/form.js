@@ -233,17 +233,101 @@ let content,
   aspectRatio,
   frameskip;
 
-navigator.requestMIDIAccess().then((access) => {
-  // Get lists of available MIDI controllers
-  const inputs = access.inputs.values();
-  const outputs = access.outputs.values();
+if (navigator.requestMIDIAccess) {
+  console.log("This browser supports WebMIDI!");
+  navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+} else {
+  console.log("WebMIDI is not supported in this browser.");
+}
 
-  access.onstatechange = (event) => {
-    console.log(event);
-    // Print information about the (dis)connected MIDI controller
-    // console.log(event.port.name, event.port.manufacturer, event.port.state);
-  };
-});
+function onMIDISuccess(midiAccess) {
+  for (var input of midiAccess.inputs.values()) {
+    input.onmidimessage = getMIDIMessage;
+  }
+}
+
+function onMIDIFailure() {
+  console.log(
+    "Error: Could not access MIDI devices. Connect a device and refresh to try again."
+  );
+}
+
+const whiteKeys = [
+  36, 36, 38, 38, 40, 40, 41, 41, 43, 43, 45, 45, 47, 47, 48, 48, 50, 50, 52,
+  52, 53, 53, 55, 55, 57, 57, 59, 59, 60, 60, 62, 62, 64, 64, 65, 65, 67, 67,
+  69, 69, 71, 71, 72, 72, 74, 74, 76, 76, 77, 77, 79, 79, 81, 81, 83, 83, 84,
+  84,
+];
+
+const blackKeys = [
+  37, 37, 39, 39, 42, 42, 44, 44, 46, 46, 49, 49, 51, 51, 54, 54, 56, 56, 58,
+  58, 61, 61, 63, 63, 66, 66, 68, 68, 70, 70, 73, 73, 75, 75, 78, 78, 80, 80,
+  82, 82,
+];
+
+function getMIDIMessage(message) {
+  var command = message.data[0];
+  var note = message.data[1];
+  var mod = message.data[2];
+  var velocity = message.data.length > 2 ? message.data[2] / 100 : 0; // a velocity value might not be included with a noteOff command
+  // console.log(mod);
+  // console.log(velocity);
+
+  // console.log(command);
+
+  switch (command) {
+    case 144: // noteOn
+      if (whiteKeys.includes(note)) {
+        var wIndex = whiteKeys.findIndex((n) => n === note);
+        var number = Math.round(((wIndex + velocity) * 100) / whiteKeys.length);
+
+        document.engine.layers[0] = new document.BackgroundLayer(number, ROM);
+        // History.pushState(
+        //   { layer1: number },
+        //   document.title,
+        //   setUrlFromString("layer1=" + number)
+        // );
+      }
+
+      if (blackKeys.includes(note)) {
+        var keys = Object.keys(suggestedLayers);
+        // var bIndex = blackKeys.findIndex((n) => n === note);
+        var random = suggestedLayers[keys[(keys.length * Math.random()) << 0]];
+        var number1 = random[0];
+        var number2 = random[1];
+        console.log(number1, number2);
+
+        document.engine.layers[0] = new document.BackgroundLayer(number1, ROM);
+        // History.pushState(
+        //   { layer1: number1 },
+        //   document.title,
+        //   setUrlFromString("layer1=" + number1)
+        // );
+
+        document.engine.layers[1] = new document.BackgroundLayer(number2, ROM);
+        History.pushState(
+          { layer2: number2 },
+          document.title,
+          setUrlFromString("layer2=" + number2)
+        );
+      }
+      break;
+    // case 128: // noteOff
+    //   console.log("note OFF: ", note);
+    //   break;
+    // we could easily expand this switch statement to cover other types of commands such as controllers or sysex
+    case 176: // mod
+      console.log("mod:  ", mod * 2);
+      var modifier = mod * 2;
+      document.engine.layers[1] = new document.BackgroundLayer(modifier, ROM);
+      // History.pushState(
+      //   { layer2: modifier },
+      //   document.title,
+      //   setUrlFromString("layer2=" + modifier)
+      // );
+      break;
+  }
+}
 
 document.addEventListener("DOMContentLoaded", function () {
   content = document.querySelector("section#everything");
